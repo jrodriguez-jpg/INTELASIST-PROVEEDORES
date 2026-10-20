@@ -14,7 +14,12 @@ Aplicación React + Vite que usa Supabase como base de datos.
 
 Configura las dos variables anteriores en el entorno de compilación de cada hosting. La clave `anon` es pública y puede estar en el cliente; nunca uses `service_role` en esta aplicación.
 
-Aplica `supabase/migrations/20261018043416_create_proveedores_table.sql` en el SQL Editor de Supabase antes de publicar.
+Aplica las migraciones en orden en el SQL Editor de Supabase antes de publicar:
+
+1. `supabase/migrations/20261018043416_create_proveedores_table.sql` crea la tabla persistente `public.proveedores` con nombre, empresa, teléfono y los demás campos del directorio.
+2. `supabase/migrations/20261020000000_enable_proveedores_realtime.sql` habilita los permisos de la aplicación y agrega la tabla a Supabase Realtime.
+
+Al guardar un contacto desde el formulario, se inserta en Supabase y permanece disponible al volver a abrir la página. Los cambios realizados por otros usuarios conectados se reflejan en la página en tiempo real.
 
 **Importante:** las políticas actuales permiten que cualquier visitante anónimo lea, cree, modifique y elimine proveedores. Publica solo si esa es la política de acceso deseada.
 

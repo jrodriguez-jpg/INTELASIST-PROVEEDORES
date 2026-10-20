@@ -214,23 +214,45 @@ export default function App() {
 
   // Cargar proveedores desde Supabase
   const cargar = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
     const { data, error } = await supabase
       .from('proveedores')
       .select('*')
       .order('created_at', { ascending: true });
     if (error) {
-      setLoadError('No se pudieron cargar los contactos.');
-      setProveedores([]);
-    } else {
-      setProveedores((data as ProveedorRow[]).map(rowToProveedor));
+      console.error('No se pudieron cargar los contactos de Supabase:', error);
+      setLoadError('No se pudieron cargar los contactos. Se conservaron los datos visibles; vuelve a intentar.');
+      setLoading(false);
+      return;
     }
+
+    setLoadError(null);
+    setProveedores((data as ProveedorRow[]).map(rowToProveedor));
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    cargar();
+    const channel = supabase
+      .channel('proveedores-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'proveedores' },
+        () => {
+          void cargar();
+        },
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          void cargar();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error(`Supabase Realtime no pudo conectarse: ${status}`);
+          setLoadError('No se pudo conectar a las actualizaciones en tiempo real.');
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [cargar]);
 
   const provincias = useMemo(() => provinciasConProveedores(proveedores), [proveedores]);
