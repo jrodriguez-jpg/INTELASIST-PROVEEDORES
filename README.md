@@ -21,7 +21,7 @@ Aplica las migraciones en orden en el SQL Editor de Supabase antes de publicar:
 
 Al guardar un contacto desde el formulario, se inserta en Supabase y permanece disponible al volver a abrir la página. Los cambios realizados por otros usuarios conectados se reflejan en la página en tiempo real.
 
-El directorio agrupa los contactos por empresa y provincia. Cada ficha muestra primero la zona, el teléfono base y el encargado; debajo lista los nombres y teléfonos de todos los contactos. Una misma empresa puede conservar fichas en varias provincias.
+El directorio agrupa los contactos por empresa y provincia. Cada ficha muestra la empresa, el teléfono base, la zona y el encargado en un encabezado visual, seguido de etiquetas de servicio y una lista de contactos con sus teléfonos directos. Una misma empresa puede conservar fichas en varias provincias. Las tarjetas usan animaciones sutiles y respetan la preferencia del sistema por movimiento reducido.
 
 **Importante:** las políticas actuales permiten que cualquier visitante anónimo lea, cree, modifique y elimine proveedores. Publica solo si esa es la política de acceso deseada.
 

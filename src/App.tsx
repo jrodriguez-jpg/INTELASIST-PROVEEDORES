@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Cpu, MapPin, Wrench, SearchCheck, Home,
+  Cpu, MapPin, Wrench, SearchCheck, Home, Building2, Phone, UserRound,
   ChevronRight, X, Plus, Loader2, Trash2, AlertCircle,
 } from 'lucide-react';
 import {
@@ -78,11 +78,12 @@ function crearGruposEmpresa(proveedores: Proveedor[]): GrupoEmpresa[] {
         if (limpia) zonasMap.set(limpia.toLocaleLowerCase('es'), limpia);
       });
 
-      const detalle = contacto.notas
-        ?.replace(/Contacto de empresa:\s*[^|]+(?:\s*\|\s*)?/i, '')
-        .replace(/^\s*\|\s*|\s*\|\s*$/g, '')
-        .trim();
-      if (detalle) detallesMap.set(detalle.toLocaleLowerCase('es'), detalle);
+      contacto.notas
+        ?.replace(/Contacto de empresa:\s*[^|]+/i, '')
+        .split('|')
+        .map((detalle) => detalle.trim())
+        .filter(Boolean)
+        .forEach((detalle) => detallesMap.set(detalle.toLocaleLowerCase('es'), detalle));
     });
 
     return {
@@ -164,76 +165,139 @@ function EmpresaCard({
   onDelete: (id: string) => void;
 }) {
   return (
-    <article className="overflow-hidden border border-slate-300 bg-white">
-      <header className="grid gap-x-6 gap-y-1 border-b border-amber-300 bg-amber-100 px-4 py-2.5 text-xs font-bold text-slate-900 sm:grid-cols-[minmax(0,1.2fr)_minmax(100px,0.45fr)_minmax(0,2fr)]">
-        <h3 className="min-w-0 break-words">{grupo.empresa}</h3>
-        {grupo.telefonoBase ? (
-          <a
-            href={`tel:${grupo.telefonoBase.replace(/[^\d]/g, '')}`}
-            className="whitespace-nowrap hover:text-sky-800"
-          >
-            {grupo.telefonoBase}
-          </a>
-        ) : (
-          <span className="text-slate-500">Base sin teléfono</span>
-        )}
-        <p className="min-w-0 break-words font-semibold">
-          Zona: {grupo.zonas.join(' / ') || 'No especificada'}
-          <span className="px-1.5 text-amber-700">·</span>
-          Contacto: {grupo.encargado ?? 'No especificado'}
-        </p>
+    <article className="company-card-enter group overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-sky-200 hover:shadow-xl hover:shadow-slate-200/70">
+      <header className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-sky-950 px-5 py-5 text-white sm:px-6">
+        <div className="pointer-events-none absolute -right-8 -top-12 h-40 w-40 rounded-full border-[24px] border-white/[0.04]" />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3.5">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-white/10 bg-white/10 text-sky-200 shadow-inner">
+              <Building2 className="h-5 w-5" strokeWidth={1.8} />
+            </div>
+            <div className="min-w-0 pt-0.5">
+              <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.2em] text-sky-300/80">
+                Proveedor
+              </p>
+              <h3 className="break-words text-lg font-semibold leading-tight tracking-tight sm:text-xl">
+                {grupo.empresa}
+              </h3>
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {grupo.provincias.map((provincia) => (
+                  <span
+                    key={provincia}
+                    className="rounded-full border border-white/10 bg-white/[0.07] px-2.5 py-1 text-[10px] font-medium text-slate-200"
+                  >
+                    {provincia}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2 self-start rounded-xl border border-white/10 bg-white/[0.08] px-3.5 py-2.5 transition-colors group-hover:bg-white/[0.12]">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-sky-400/15 text-sky-200">
+              <Phone className="h-4 w-4" />
+            </span>
+            <span>
+              <span className="block text-[9px] font-medium uppercase tracking-wider text-slate-300">Teléfono base</span>
+              {grupo.telefonoBase ? (
+                <a
+                  href={`tel:${grupo.telefonoBase.replace(/[^\d]/g, '')}`}
+                  className="mt-0.5 block text-sm font-semibold tabular-nums text-white hover:text-sky-200"
+                >
+                  {grupo.telefonoBase}
+                </a>
+              ) : (
+                <span className="mt-0.5 block text-sm text-slate-300">No indicado</span>
+              )}
+            </span>
+          </div>
+        </div>
+
+        <div className="relative mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 pt-3 text-xs text-slate-300">
+          <span className="inline-flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 text-sky-300" />
+            <span className="font-medium text-slate-100">Zona</span>
+            {grupo.zonas.join(' / ') || 'No especificada'}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <UserRound className="h-3.5 w-3.5 text-sky-300" />
+            <span className="font-medium text-slate-100">Encargado</span>
+            {grupo.encargado ?? 'No especificado'}
+          </span>
+        </div>
       </header>
 
       {grupo.detalles.length > 0 && (
-        <div className="border-b border-slate-200 px-4 py-1.5 text-[10px] font-bold uppercase leading-relaxed tracking-wide text-blue-950">
-          {grupo.detalles.join(' | ')}
-        </div>
-      )}
-
-      {grupo.provincias.length > 1 && (
-        <div className="border-b border-slate-100 px-4 py-1 text-[10px] text-slate-500">
-          Provincias: {grupo.provincias.join(' / ')}
-        </div>
-      )}
-
-      <ul className="px-4">
-        {grupo.contactos.map((contacto) => (
-          <li
-            key={contacto.id}
-            className={`grid grid-cols-[minmax(0,1fr)_minmax(90px,0.45fr)_28px] items-center gap-3 border-b border-dotted border-slate-300 py-2 text-xs last:border-b-0 ${deletingId === contacto.id ? 'opacity-50' : ''}`}
-          >
-            <div className="min-w-0">
-              <p className="break-words font-medium text-slate-800">{contacto.nombre}</p>
-              {contacto.correo && (
-                <a
-                  href={`mailto:${contacto.correo}`}
-                  className="mt-0.5 block truncate text-[10px] text-slate-500 hover:text-sky-700"
-                >
-                  {contacto.correo}
-                </a>
-              )}
-            </div>
-            {contacto.telefono ? (
-              <a
-                href={`tel:${contacto.telefono.replace(/[^\d]/g, '')}`}
-                className="whitespace-nowrap text-slate-700 hover:text-sky-700"
-              >
-                {contacto.telefono}
-              </a>
-            ) : (
-              <span className="text-slate-400">—</span>
-            )}
-            <button
-              onClick={() => onDelete(contacto.id)}
-              className="rounded p-1 text-slate-300 transition-colors hover:bg-red-50 hover:text-red-500"
-              title={`Eliminar contacto ${contacto.nombre}`}
-              aria-label={`Eliminar contacto ${contacto.nombre}`}
+        <div className="flex flex-wrap gap-1.5 border-b border-slate-100 bg-sky-50/60 px-5 py-3 sm:px-6">
+          {grupo.detalles.map((detalle) => (
+            <span
+              key={detalle}
+              className="rounded-full border border-sky-100 bg-white px-2.5 py-1 text-[10px] font-semibold text-sky-900 shadow-sm"
             >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </li>
-        ))}
-      </ul>
+              {detalle}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <section className="px-4 py-4 sm:px-6 sm:py-5">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <h4 className="text-xs font-bold text-slate-800">Equipo de contacto</h4>
+            <p className="mt-0.5 text-[10px] text-slate-400">Personas y líneas directas</p>
+          </div>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold tabular-nums text-slate-600">
+            {grupo.contactos.length} {grupo.contactos.length === 1 ? 'contacto' : 'contactos'}
+          </span>
+        </div>
+
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {grupo.contactos.map((contacto) => (
+            <li
+              key={contacto.id}
+              className={`contact-row group/row flex min-w-0 items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2.5 transition duration-200 hover:border-sky-200 hover:bg-white hover:shadow-md hover:shadow-slate-200/50 ${deletingId === contacto.id ? 'opacity-50' : ''}`}
+            >
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-slate-200 to-slate-100 text-[11px] font-bold text-slate-600 transition-colors group-hover/row:from-sky-100 group-hover/row:to-cyan-50 group-hover/row:text-sky-700">
+                {contacto.nombre
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((parte) => parte[0])
+                  .join('')
+                  .toLocaleUpperCase('es')}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-slate-800">{contacto.nombre}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                  {contacto.telefono ? (
+                    <a
+                      href={`tel:${contacto.telefono.replace(/[^\d]/g, '')}`}
+                      className="inline-flex items-center gap-1 rounded-md bg-white px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-slate-600 ring-1 ring-slate-200 transition-colors hover:text-sky-700"
+                    >
+                      <Phone className="h-2.5 w-2.5" />
+                      {contacto.telefono}
+                    </a>
+                  ) : (
+                    <span className="text-[10px] text-slate-400">Sin teléfono</span>
+                  )}
+                  {contacto.rol.map((rol) => (
+                    <span key={rol} className="text-[9px] font-medium capitalize text-slate-400">
+                      {rol}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={() => onDelete(contacto.id)}
+                className="shrink-0 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-red-50 hover:text-red-500 hover:opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100"
+                title={`Eliminar contacto ${contacto.nombre}`}
+                aria-label={`Eliminar contacto ${contacto.nombre}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
     </article>
   );
 }
