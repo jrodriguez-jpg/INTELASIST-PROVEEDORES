@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Cpu, MapPin, Phone, Mail, User, Building2, Wrench, SearchCheck, Home,
+  Cpu, MapPin, Wrench, SearchCheck, Home,
   ChevronRight, X, Plus, Loader2, Trash2, AlertCircle,
 } from 'lucide-react';
 import {
@@ -30,6 +30,72 @@ function rowToProveedor(r: ProveedorRow): Proveedor {
     zona: r.zona,
     notas: r.notas,
   };
+}
+
+interface GrupoEmpresa {
+  id: string;
+  empresa: string;
+  telefonoBase: string | null;
+  encargado: string | null;
+  zonas: string[];
+  provincias: string[];
+  detalles: string[];
+  contactos: Proveedor[];
+}
+
+function crearGruposEmpresa(proveedores: Proveedor[]): GrupoEmpresa[] {
+  const grupos = new Map<string, Proveedor[]>();
+
+  proveedores.forEach((proveedor) => {
+    const empresaNormalizada = proveedor.empresa?.trim().replace(/\s+/g, ' ').toLocaleLowerCase('es');
+    const provincias = [...proveedor.provincias].sort();
+    const id = empresaNormalizada
+      ? `${empresaNormalizada}|${provincias.join('|')}`
+      : proveedor.id;
+    const contactos = grupos.get(id) ?? [];
+    contactos.push(proveedor);
+    grupos.set(id, contactos);
+  });
+
+  return [...grupos.entries()].map(([id, contactos]) => {
+    const empresaCompleta = contactos[0].empresa?.trim().replace(/\s+/g, ' ') ?? 'Contacto';
+    const telefonoBase = empresaCompleta.match(/(\d{4}-\d{4})\s*$/)?.[1] ?? null;
+    const empresa = empresaCompleta.replace(/\s*\d{4}-\d{4}\s*$/, '').trim() || empresaCompleta;
+    const encargadoEnNotas = contactos
+      .map((contacto) => contacto.notas?.match(/Contacto de empresa:\s*([^|]+)/i)?.[1]?.trim())
+      .find((nombre): nombre is string => Boolean(nombre));
+    const contactoBase = contactos.find(
+      (contacto) =>
+        telefonoBase &&
+        contacto.telefono?.replace(/[^\d]/g, '') === telefonoBase.replace(/[^\d]/g, ''),
+    );
+    const zonasMap = new Map<string, string>();
+    const detallesMap = new Map<string, string>();
+
+    contactos.forEach((contacto) => {
+      contacto.zona?.split(/\s*\/\s*/).forEach((zona) => {
+        const limpia = zona.trim();
+        if (limpia) zonasMap.set(limpia.toLocaleLowerCase('es'), limpia);
+      });
+
+      const detalle = contacto.notas
+        ?.replace(/Contacto de empresa:\s*[^|]+(?:\s*\|\s*)?/i, '')
+        .replace(/^\s*\|\s*|\s*\|\s*$/g, '')
+        .trim();
+      if (detalle) detallesMap.set(detalle.toLocaleLowerCase('es'), detalle);
+    });
+
+    return {
+      id,
+      empresa,
+      telefonoBase,
+      encargado: encargadoEnNotas ?? contactoBase?.nombre ?? null,
+      zonas: [...zonasMap.values()],
+      provincias: [...new Set(contactos.flatMap((contacto) => contacto.provincias))],
+      detalles: [...detallesMap.values()],
+      contactos: [...contactos].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
+    };
+  });
 }
 
 function Logo() {
@@ -88,96 +154,86 @@ function ProvinciaItem({
   );
 }
 
-const ROL_STYLE: Record<Rol, { bg: string; text: string; ring: string; label: string; icon: typeof Wrench }> = {
-  operador: { bg: 'bg-amber-50', text: 'text-amber-700', ring: 'ring-amber-200', label: 'Operador', icon: Wrench },
-  inspector: { bg: 'bg-violet-50', text: 'text-violet-700', ring: 'ring-violet-200', label: 'Inspector', icon: SearchCheck },
-  hogar: { bg: 'bg-emerald-50', text: 'text-emerald-700', ring: 'ring-emerald-200', label: 'Hogar', icon: Home },
-};
-
-function ProveedorCard({ p, onDelete }: { p: Proveedor; onDelete: (id: string) => void }) {
+function EmpresaCard({
+  grupo,
+  deletingId,
+  onDelete,
+}: {
+  grupo: GrupoEmpresa;
+  deletingId: string | null;
+  onDelete: (id: string) => void;
+}) {
   return (
-    <article className="group relative flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-lg hover:shadow-sky-100/60">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 text-slate-700">
-            <User className="h-5 w-5" strokeWidth={2} />
-          </div>
-          <div className="min-w-0">
-            <h3 className="truncate text-[15px] font-semibold text-slate-900">{p.nombre}</h3>
-            {p.empresa && (
-              <p className="flex items-center gap-1 truncate text-xs text-slate-500">
-                <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                {p.empresa}
-              </p>
-            )}
-          </div>
-        </div>
-        <button
-          onClick={() => onDelete(p.id)}
-          className="rounded-lg p-1.5 text-slate-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
-          title="Eliminar contacto"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-1.5">
-        {p.rol.map((r) => {
-          const s = ROL_STYLE[r];
-          const Icon = s.icon;
-          return (
-            <span
-              key={r}
-              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${s.bg} ${s.text} ring-1 ${s.ring}`}
-            >
-              <Icon className="h-3 w-3" />
-              {s.label}
-            </span>
-          );
-        })}
-      </div>
-
-      <div className="grid gap-1.5 text-xs">
-        {p.telefono && (
+    <article className="overflow-hidden border border-slate-300 bg-white">
+      <header className="grid gap-x-6 gap-y-1 border-b border-amber-300 bg-amber-100 px-4 py-2.5 text-xs font-bold text-slate-900 sm:grid-cols-[minmax(0,1.2fr)_minmax(100px,0.45fr)_minmax(0,2fr)]">
+        <h3 className="min-w-0 break-words">{grupo.empresa}</h3>
+        {grupo.telefonoBase ? (
           <a
-            href={`tel:${p.telefono.replace(/[^\d]/g, '')}`}
-            className="flex items-center gap-2 text-slate-600 transition-colors hover:text-sky-700"
+            href={`tel:${grupo.telefonoBase.replace(/[^\d]/g, '')}`}
+            className="whitespace-nowrap hover:text-sky-800"
           >
-            <Phone className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            {p.telefono}
+            {grupo.telefonoBase}
           </a>
+        ) : (
+          <span className="text-slate-500">Base sin teléfono</span>
         )}
-        {p.correo && (
-          <a
-            href={`mailto:${p.correo}`}
-            className="flex items-center gap-2 truncate text-slate-600 transition-colors hover:text-sky-700"
-          >
-            <Mail className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <span className="truncate">{p.correo}</span>
-          </a>
-        )}
-      </div>
-
-      {p.zona && (
-        <div className="flex items-center gap-2 border-t border-slate-100 pt-3 text-[11px] font-medium text-slate-500">
-          <MapPin className="h-3.5 w-3.5 text-sky-500" />
-          {p.zona}
-        </div>
-      )}
-
-      {p.notas && (
-        <p className="rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-500">
-          {p.notas}
+        <p className="min-w-0 break-words font-semibold">
+          Zona: {grupo.zonas.join(' / ') || 'No especificada'}
+          <span className="px-1.5 text-amber-700">·</span>
+          Contacto: {grupo.encargado ?? 'No especificado'}
         </p>
+      </header>
+
+      {grupo.detalles.length > 0 && (
+        <div className="border-b border-slate-200 px-4 py-1.5 text-[10px] font-bold uppercase leading-relaxed tracking-wide text-blue-950">
+          {grupo.detalles.join(' | ')}
+        </div>
       )}
 
-      <div className="flex flex-wrap gap-1 pt-1">
-        {p.provincias.map((pr) => (
-          <span key={pr} className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
-            {pr}
-          </span>
+      {grupo.provincias.length > 1 && (
+        <div className="border-b border-slate-100 px-4 py-1 text-[10px] text-slate-500">
+          Provincias: {grupo.provincias.join(' / ')}
+        </div>
+      )}
+
+      <ul className="px-4">
+        {grupo.contactos.map((contacto) => (
+          <li
+            key={contacto.id}
+            className={`grid grid-cols-[minmax(0,1fr)_minmax(90px,0.45fr)_28px] items-center gap-3 border-b border-dotted border-slate-300 py-2 text-xs last:border-b-0 ${deletingId === contacto.id ? 'opacity-50' : ''}`}
+          >
+            <div className="min-w-0">
+              <p className="break-words font-medium text-slate-800">{contacto.nombre}</p>
+              {contacto.correo && (
+                <a
+                  href={`mailto:${contacto.correo}`}
+                  className="mt-0.5 block truncate text-[10px] text-slate-500 hover:text-sky-700"
+                >
+                  {contacto.correo}
+                </a>
+              )}
+            </div>
+            {contacto.telefono ? (
+              <a
+                href={`tel:${contacto.telefono.replace(/[^\d]/g, '')}`}
+                className="whitespace-nowrap text-slate-700 hover:text-sky-700"
+              >
+                {contacto.telefono}
+              </a>
+            ) : (
+              <span className="text-slate-400">—</span>
+            )}
+            <button
+              onClick={() => onDelete(contacto.id)}
+              className="rounded p-1 text-slate-300 transition-colors hover:bg-red-50 hover:text-red-500"
+              title={`Eliminar contacto ${contacto.nombre}`}
+              aria-label={`Eliminar contacto ${contacto.nombre}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </li>
         ))}
-      </div>
+      </ul>
     </article>
   );
 }
@@ -284,17 +340,35 @@ export default function App() {
     };
   }, [provinciaActiva, proveedores]);
 
-  const proveedoresFiltrados = useMemo(() => {
-    const base = provinciaActiva
+  const empresasFiltradas = useMemo(() => {
+    const contactosEnProvincia = provinciaActiva
       ? proveedores.filter((p) => p.provincias.includes(provinciaActiva))
       : proveedores;
-    return base.filter(
-      (p) =>
-        p.rol.includes(filtro) &&
-        (busqueda.trim() === '' ||
-          p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-          (p.empresa?.toLowerCase().includes(busqueda.toLowerCase()) ?? false))
-    );
+    const grupos = crearGruposEmpresa(contactosEnProvincia);
+    const termino = busqueda.trim().toLocaleLowerCase('es');
+
+    return grupos.flatMap((grupo) => {
+      const contactosConRol = grupo.contactos.filter((contacto) => contacto.rol.includes(filtro));
+      if (contactosConRol.length === 0) return [];
+      if (!termino) return [{ ...grupo, contactos: contactosConRol }];
+
+      const encabezadoCoincide = [
+        grupo.empresa,
+        grupo.telefonoBase ?? '',
+        grupo.encargado ?? '',
+        ...grupo.zonas,
+        ...grupo.provincias,
+      ].some((valor) => valor.toLocaleLowerCase('es').includes(termino));
+
+      const contactosVisibles = encabezadoCoincide
+        ? contactosConRol
+        : contactosConRol.filter((contacto) =>
+            [contacto.nombre, contacto.telefono ?? '', contacto.correo ?? '', contacto.notas ?? '']
+              .some((valor) => valor.toLocaleLowerCase('es').includes(termino)),
+          );
+
+      return contactosVisibles.length > 0 ? [{ ...grupo, contactos: contactosVisibles }] : [];
+    });
   }, [proveedores, provinciaActiva, filtro, busqueda]);
 
   const handlePickProvincia = (pr: string) => {
@@ -485,14 +559,17 @@ export default function App() {
               <Loader2 className="h-7 w-7 animate-spin text-sky-500" />
               <p className="mt-3 text-sm">Cargando contactos...</p>
             </div>
-          ) : proveedoresFiltrados.length === 0 ? (
+          ) : empresasFiltradas.length === 0 ? (
             <EmptyState provincia={provinciaActiva} hasData={proveedores.length > 0} />
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-              {proveedoresFiltrados.map((p) => (
-                <div key={p.id} className={deletingId === p.id ? 'opacity-50' : ''}>
-                  <ProveedorCard p={p} onDelete={handleDelete} />
-                </div>
+            <div className="space-y-5">
+              {empresasFiltradas.map((grupo) => (
+                <EmpresaCard
+                  key={grupo.id}
+                  grupo={grupo}
+                  deletingId={deletingId}
+                  onDelete={handleDelete}
+                />
               ))}
             </div>
           )}
