@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Cpu, MapPin, Wrench, SearchCheck, Home, Building2, Phone, UserRound,
-  ChevronRight, X, Plus, Loader2, Trash2, AlertCircle,
+  ChevronRight, X, Plus, Loader2, Trash2, AlertCircle, Check,
 } from 'lucide-react';
 import {
   NOMBRES_PROVINCIAS, CAPITAL_PROVINCIA, provinciasConProveedores,
@@ -136,12 +136,7 @@ function ProvinciaItem({
         }`}
         strokeWidth={2}
       />
-      <span className="flex flex-1 flex-col truncate">
-        <span className="truncate font-medium leading-tight">{provincia}</span>
-        <span className={`truncate text-[10px] font-normal leading-tight ${active ? 'text-sky-300/70' : 'text-slate-500 group-hover:text-slate-400'}`}>
-          Capital: {CAPITAL_PROVINCIA[provincia]}
-        </span>
-      </span>
+      <span className="flex-1 truncate font-medium leading-tight">{provincia}</span>
       <span
         className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums transition-colors ${
           active
@@ -164,6 +159,24 @@ function EmpresaCard({
   deletingId: string | null;
   onDelete: (id: string) => void;
 }) {
+  const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
+
+  const copiarTelefono = async (telefono: string) => {
+    try {
+      await navigator.clipboard.writeText(telefono);
+      setCopiedPhone(telefono);
+      setCopyError(null);
+      window.setTimeout(() => {
+        setCopiedPhone((current) => (current === telefono ? null : current));
+      }, 1500);
+    } catch (error) {
+      console.error('No se pudo copiar el teléfono:', error);
+      setCopiedPhone(null);
+      setCopyError(telefono);
+    }
+  };
+
   return (
     <article className="company-card-enter group overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition duration-300 hover:-translate-y-1 hover:border-sky-200 hover:shadow-xl hover:shadow-slate-200/70">
       <header className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-sky-950 px-5 py-5 text-white sm:px-6">
@@ -200,12 +213,27 @@ function EmpresaCard({
             <span>
               <span className="block text-[9px] font-medium uppercase tracking-wider text-slate-300">Teléfono base</span>
               {grupo.telefonoBase ? (
-                <a
-                  href={`tel:${grupo.telefonoBase.replace(/[^\d]/g, '')}`}
-                  className="mt-0.5 block text-sm font-semibold tabular-nums text-white hover:text-sky-200"
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (grupo.telefonoBase) void copiarTelefono(grupo.telefonoBase);
+                  }}
+                  className="mt-0.5 block text-left text-sm font-semibold tabular-nums text-white hover:text-sky-200"
+                  title="Copiar teléfono"
+                  aria-label={`Copiar teléfono base ${grupo.telefonoBase}`}
                 >
                   {grupo.telefonoBase}
-                </a>
+                  {copiedPhone === grupo.telefonoBase && (
+                    <span className="ml-1.5 text-[10px] font-medium text-emerald-300" role="status">
+                      Copiado
+                    </span>
+                  )}
+                  {copyError === grupo.telefonoBase && (
+                    <span className="ml-1.5 text-[10px] font-medium text-red-300" role="status">
+                      No se pudo copiar
+                    </span>
+                  )}
+                </button>
               ) : (
                 <span className="mt-0.5 block text-sm text-slate-300">No indicado</span>
               )}
@@ -269,13 +297,22 @@ function EmpresaCard({
                 <p className="truncate text-xs font-semibold text-slate-800">{contacto.nombre}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   {contacto.telefono ? (
-                    <a
-                      href={`tel:${contacto.telefono.replace(/[^\d]/g, '')}`}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (contacto.telefono) void copiarTelefono(contacto.telefono);
+                      }}
                       className="inline-flex items-center gap-1 rounded-md bg-white px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-slate-600 ring-1 ring-slate-200 transition-colors hover:text-sky-700"
+                      title="Copiar teléfono"
+                      aria-label={`Copiar teléfono de ${contacto.nombre}: ${contacto.telefono}`}
                     >
                       <Phone className="h-2.5 w-2.5" />
                       {contacto.telefono}
-                    </a>
+                      {copiedPhone === contacto.telefono && <Check className="h-2.5 w-2.5 text-emerald-600" aria-label="Copiado" />}
+                      {copyError === contacto.telefono && (
+                        <span className="text-[9px] text-red-600" role="status">No se pudo copiar</span>
+                      )}
+                    </button>
                   ) : (
                     <span className="text-[10px] text-slate-400">Sin teléfono</span>
                   )}
@@ -496,6 +533,8 @@ export default function App() {
 
         <div className="border-t border-slate-800 px-5 py-4 text-[10px] leading-relaxed text-slate-500">
           <p className="font-semibold text-slate-400">INTELASIST · Proveedores</p>
+          <p className="mt-1 font-semibold uppercase tracking-wide text-slate-400">Gerente de proveedores</p>
+          <p className="text-slate-200">Jorge Samudio</p>
           <p className="mt-0.5">Directorio de recursos por provincia</p>
         </div>
       </aside>
