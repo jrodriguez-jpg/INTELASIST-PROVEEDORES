@@ -26,7 +26,9 @@ export const PROVINCIAS: Provincia[] = [
   { nombre: 'Darién', capital: 'La Palma' },
   { nombre: 'Herrera', capital: 'Chitré' },
   { nombre: 'Los Santos', capital: 'Las Tablas' },
-  { nombre: 'Panamá', capital: 'Ciudad de Panamá' },
+  { nombre: 'Panamá Centro', capital: '' },
+  { nombre: 'Panamá Norte', capital: '' },
+  { nombre: 'Panamá Este', capital: '' },
   { nombre: 'Panamá Oeste', capital: 'La Chorrera' },
   { nombre: 'Veraguas', capital: 'Santiago de Veraguas' },
 ];

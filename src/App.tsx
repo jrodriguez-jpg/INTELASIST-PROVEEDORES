@@ -575,7 +575,7 @@ export default function App() {
             </h1>
             {provinciaActiva && (
               <p className="text-sm text-slate-500">
-                Capital: {CAPITAL_PROVINCIA[provinciaActiva]} ·{' '}
+                {CAPITAL_PROVINCIA[provinciaActiva] && `Capital: ${CAPITAL_PROVINCIA[provinciaActiva]} · `}
                 {conteosRol.total} contacto{conteosRol.total === 1 ? '' : 's'}
               </p>
             )}
@@ -683,6 +683,7 @@ export default function App() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onSaved={cargar}
+        proveedores={proveedores}
       />
     </div>
   );
