@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Cpu, MapPin, Wrench, SearchCheck, Home, Building2, Phone, UserRound,
-  ChevronRight, X, Plus, Loader2, Trash2, AlertCircle, Check,
+  ChevronRight, X, Plus, Loader2, Trash2, AlertCircle, Check, Pencil, LogOut,
 } from 'lucide-react';
 import {
   NOMBRES_PROVINCIAS, CAPITAL_PROVINCIA, provinciasConProveedores,
@@ -9,6 +9,9 @@ import {
 } from '@/data/providers';
 import { supabase, type ProveedorRow } from '@/lib/supabase';
 import { AddProveedorModal } from '@/components/AddProveedorModal';
+import { AccessGate } from '@/components/AccessGate';
+import { EditProveedorModal } from '@/components/EditProveedorModal';
+import { apiRequest, type AccessRole, type AccessSession } from '@/lib/api';
 
 type Filtro = Rol;
 
@@ -154,10 +157,14 @@ function EmpresaCard({
   grupo,
   deletingId,
   onDelete,
+  onEdit,
+  canManage,
 }: {
   grupo: GrupoEmpresa;
   deletingId: string | null;
   onDelete: (id: string) => void;
+  onEdit: (contacto: Proveedor) => void;
+  canManage: boolean;
 }) {
   const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -323,14 +330,29 @@ function EmpresaCard({
                   ))}
                 </div>
               </div>
-              <button
-                onClick={() => onDelete(contacto.id)}
-                className="shrink-0 rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-red-50 hover:text-red-500 hover:opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100"
-                title={`Eliminar contacto ${contacto.nombre}`}
-                aria-label={`Eliminar contacto ${contacto.nombre}`}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              {canManage && (
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onEdit(contacto)}
+                    className="rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-sky-50 hover:text-sky-600 hover:opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100"
+                    title={`Actualizar contacto ${contacto.nombre}`}
+                    aria-label={`Actualizar contacto ${contacto.nombre}`}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(contacto.id)}
+                    disabled={deletingId === contacto.id}
+                    className="rounded-lg p-1.5 text-slate-300 opacity-60 transition hover:bg-red-50 hover:text-red-500 hover:opacity-100 disabled:cursor-wait sm:opacity-0 sm:group-hover/row:opacity-100"
+                    title={`Eliminar contacto ${contacto.nombre}`}
+                    aria-label={`Eliminar contacto ${contacto.nombre}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -339,7 +361,15 @@ function EmpresaCard({
   );
 }
 
-function EmptyState({ provincia, hasData }: { provincia: string | null; hasData: boolean }) {
+function EmptyState({
+  provincia,
+  hasData,
+  canManage,
+}: {
+  provincia: string | null;
+  hasData: boolean;
+  canManage: boolean;
+}) {
   return (
     <div className="grid place-items-center rounded-2xl border-2 border-dashed border-slate-200 bg-white/50 px-6 py-20 text-center">
       <div className="grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 text-slate-400">
@@ -353,7 +383,9 @@ function EmptyState({ provincia, hasData }: { provincia: string | null; hasData:
           : 'Selecciona una provincia'}
       </p>
       <p className="mt-1 text-xs text-slate-400">
-        Usa el botón "Agregar contacto" para empezar a llenar el directorio.
+        {canManage
+          ? 'Usa el botón "Agregar contacto" para empezar a llenar el directorio.'
+          : 'No hay contactos registrados en esta provincia.'}
       </p>
     </div>
   );
@@ -363,11 +395,59 @@ export default function App() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [session, setSession] = useState<AccessSession | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [filtro, setFiltro] = useState<Filtro>('operador');
   const [busqueda, setBusqueda] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<Proveedor | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem('intelasist-session');
+    if (!stored) {
+      setCheckingSession(false);
+      return;
+    }
+
+    let storedSession: AccessSession;
+    try {
+      storedSession = JSON.parse(stored) as AccessSession;
+      if (
+        typeof storedSession.token !== 'string'
+        || (storedSession.role !== 'viewer' && storedSession.role !== 'admin')
+      ) {
+        throw new Error('Invalid stored session.');
+      }
+    } catch (error) {
+      console.error('La sesión local no es válida:', error);
+      sessionStorage.removeItem('intelasist-session');
+      setCheckingSession(false);
+      return;
+    }
+
+    void apiRequest<{ role: AccessRole }>('/session', { token: storedSession.token })
+      .then(({ role }) => setSession({ ...storedSession, role }))
+      .catch((error: unknown) => {
+        console.error('No se pudo validar la sesión guardada:', error);
+        sessionStorage.removeItem('intelasist-session');
+      })
+      .finally(() => setCheckingSession(false));
+  }, []);
+
+  const handleAuthenticated = (newSession: AccessSession) => {
+    sessionStorage.setItem('intelasist-session', JSON.stringify(newSession));
+    setSession(newSession);
+    setLoadError(null);
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('intelasist-session');
+    setSession(null);
+    setProveedores([]);
+    setLoading(true);
+  };
 
   // Cargar proveedores desde Supabase
   const cargar = useCallback(async () => {
@@ -388,6 +468,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!session) return undefined;
     const channel = supabase
       .channel('proveedores-realtime')
       .on(
@@ -410,7 +491,7 @@ export default function App() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [cargar]);
+  }, [cargar, session]);
 
   const provincias = useMemo(() => provinciasConProveedores(proveedores), [proveedores]);
   const todasConConteo = useMemo(() => {
@@ -478,18 +559,36 @@ export default function App() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!session || session.role !== 'admin') return;
+    if (!window.confirm('¿Seguro que deseas eliminar este contacto?')) return;
     setDeletingId(id);
-    const { error } = await supabase.from('proveedores').delete().eq('id', id);
-    setDeletingId(null);
-    if (error) {
-      setLoadError('No se pudo eliminar el contacto.');
-      return;
+    try {
+      await apiRequest(`/proveedores/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        token: session.token,
+      });
+      await cargar();
+    } catch (error) {
+      console.error('No se pudo eliminar el contacto:', error);
+      setLoadError(error instanceof Error ? error.message : 'No se pudo eliminar el contacto.');
+    } finally {
+      setDeletingId(null);
     }
-    await cargar();
   };
 
   // Lista a mostrar en el sidebar: si hay proveedores, solo las que tienen; si no, todas.
   const provinciasSidebar = provincias.length > 0 ? provincias : NOMBRES_PROVINCIAS;
+
+  if (checkingSession) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-slate-950 text-sky-300">
+        <Loader2 className="h-8 w-8 animate-spin" aria-label="Validando sesión" />
+      </div>
+    );
+  }
+  if (!session) return <AccessGate onAuthenticated={handleAuthenticated} />;
+
+  const canManage = session.role === 'admin';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -636,14 +735,27 @@ export default function App() {
                   </button>
                 )}
               </div>
-              <button
-                onClick={() => setModalOpen(true)}
-                className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-sky-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700"
-              >
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">Agregar contacto</span>
-                <span className="sm:hidden">Agregar</span>
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                {canManage && (
+                  <button
+                    onClick={() => setModalOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span className="hidden sm:inline">Agregar contacto</span>
+                    <span className="sm:hidden">Agregar</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                  title="Cerrar sesión"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="hidden sm:inline">{canManage ? 'Administrador' : 'Solo lectura'}</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -663,7 +775,7 @@ export default function App() {
               <p className="mt-3 text-sm">Cargando contactos...</p>
             </div>
           ) : empresasFiltradas.length === 0 ? (
-            <EmptyState provincia={provinciaActiva} hasData={proveedores.length > 0} />
+            <EmptyState provincia={provinciaActiva} hasData={proveedores.length > 0} canManage={canManage} />
           ) : (
             <div className="space-y-5">
               {empresasFiltradas.map((grupo) => (
@@ -672,6 +784,8 @@ export default function App() {
                   grupo={grupo}
                   deletingId={deletingId}
                   onDelete={handleDelete}
+                  onEdit={setEditingContact}
+                  canManage={canManage}
                 />
               ))}
             </div>
@@ -684,6 +798,13 @@ export default function App() {
         onClose={() => setModalOpen(false)}
         onSaved={cargar}
         proveedores={proveedores}
+        token={session.token}
+      />
+      <EditProveedorModal
+        proveedor={editingContact}
+        token={session.token}
+        onClose={() => setEditingContact(null)}
+        onSaved={cargar}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { X, User, Building2, Phone, Mail, MapPin, FileText, Plus, Loader2 } from 'lucide-react';
 import { NOMBRES_PROVINCIAS, type Proveedor } from '@/data/providers';
-import { supabase } from '@/lib/supabase';
+import { apiRequest } from '@/lib/api';
 
 export type Rol = 'operador' | 'inspector' | 'hogar';
 
@@ -10,6 +10,7 @@ interface Props {
   onClose: () => void;
   onSaved: () => void;
   proveedores: Proveedor[];
+  token: string;
 }
 
 const ROLES: { id: Rol; label: string }[] = [
@@ -18,7 +19,7 @@ const ROLES: { id: Rol; label: string }[] = [
   { id: 'hogar', label: 'Hogar' },
 ];
 
-export function AddProveedorModal({ open, onClose, onSaved, proveedores }: Props) {
+export function AddProveedorModal({ open, onClose, onSaved, proveedores, token }: Props) {
   const [nombre, setNombre] = useState('');
   const [empresa, setEmpresa] = useState('');
   const [provincia, setProvincia] = useState('');
@@ -101,24 +102,28 @@ export function AddProveedorModal({ open, onClose, onSaved, proveedores }: Props
 
     setSaving(true);
 
-    const { error: insertError } = await supabase.from('proveedores').insert({
-      nombre: nombre.trim(),
-      empresa: empresa.trim(),
-      rol: roles,
-      provincias: [provincia],
-      telefono: telefono.trim() || null,
-      correo: correo.trim() || null,
-      zona: zona.trim() || null,
-      notas: notas.trim() || null,
-    });
-
-    setSaving(false);
-
-    if (insertError) {
-      setError('No se pudo guardar el contacto. Intenta de nuevo.');
+    try {
+      await apiRequest('/proveedores', {
+        method: 'POST',
+        token,
+        body: {
+          nombre: nombre.trim(),
+          empresa: empresa.trim(),
+          rol: roles,
+          provincias: [provincia],
+          telefono: telefono.trim(),
+          correo: correo.trim(),
+          zona: zona.trim(),
+          notas: notas.trim(),
+        },
+      });
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'No se pudo guardar el contacto.');
+      setSaving(false);
       return;
     }
 
+    setSaving(false);
     reset();
     onSaved();
     onClose();

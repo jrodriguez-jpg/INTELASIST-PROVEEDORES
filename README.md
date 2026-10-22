@@ -5,33 +5,42 @@ Aplicación React + Vite que usa Supabase como base de datos.
 ## Desarrollo local
 
 1. Instala Node.js 20 o posterior.
-2. Copia `.env.example` a `.env` y configura `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` desde el panel de tu proyecto Supabase.
-3. Ejecuta `npm ci` y luego `npm run dev`.
+2. Copia `.env.example` a `.env`. Configura las variables `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VIEWER_ACCESS_CODE`, `ADMIN_ACCESS_CODE` y `SESSION_SECRET`.
+3. Ejecuta `npm ci`.
+4. Inicia el API con `npm run dev:server` y la interfaz con `npm run dev` en dos terminales.
 
 ## Despliegue
 
 ### Supabase
 
-Configura las dos variables anteriores en el entorno de compilación de cada hosting. La clave `anon` es pública y puede estar en el cliente; nunca uses `service_role` en esta aplicación.
+La interfaz usa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` únicamente para leer el directorio y recibir cambios en tiempo real. La clave `anon` es pública. Las escrituras se realizan exclusivamente en el backend Node y la clave `service_role` solo se configura como secreto del servidor; nunca la pongas en una variable `VITE_*`, en el código del navegador ni en Git.
 
-Aplica las migraciones en orden en el SQL Editor de Supabase antes de publicar:
+Aplica las migraciones en orden en el SQL Editor de Supabase:
 
 1. `supabase/migrations/20261018043416_create_proveedores_table.sql` crea la tabla persistente `public.proveedores` con nombre, empresa, teléfono y los demás campos del directorio.
 2. `supabase/migrations/20261020000000_enable_proveedores_realtime.sql` habilita los permisos de la aplicación y agrega la tabla a Supabase Realtime.
+3. `supabase/migrations/20261021010000_restrict_provider_writes.sql` revoca INSERT, UPDATE y DELETE a `anon` y `authenticated`; las escrituras autorizadas pasan por el backend.
 
-Al guardar un contacto desde el formulario, se inserta en Supabase y permanece disponible al volver a abrir la página. Los cambios realizados por otros usuarios conectados se reflejan en la página en tiempo real.
+Aplica la tercera migración después de desplegar el nuevo backend y actualizar los frontends públicos (Render y Vercel, si ambos se usan). Confirma que el inicio de sesión funciona en cada dominio antes de revocar las escrituras directas del navegador.
 
 El directorio agrupa los contactos por empresa y provincia. Cada ficha muestra la empresa, el teléfono base, la zona y el encargado en un encabezado visual, seguido de etiquetas de servicio y una lista de contactos con sus teléfonos directos. Una misma empresa puede conservar fichas en varias provincias. Las tarjetas usan animaciones sutiles y respetan la preferencia del sistema por movimiento reducido.
 
-**Importante:** las políticas actuales permiten que cualquier visitante anónimo lea, cree, modifique y elimine proveedores. Publica solo si esa es la política de acceso deseada.
+### Acceso y permisos
+
+La pantalla de inicio solicita un código general:
+
+- El código de solo lectura permite ver el directorio sin controles de creación, edición o eliminación.
+- El código de administración habilita agregar contactos y bases, editar contactos y borrar registros.
+
+Las sesiones tienen una vigencia de 12 horas. El backend valida cada operación de escritura, por lo que ocultar controles en el navegador no es la única barrera. Configura `VIEWER_ACCESS_CODE`, `ADMIN_ACCESS_CODE` y un `SESSION_SECRET` aleatorio de al menos 32 caracteres como secretos del servidor. Los dos códigos deben ser distintos. No guardes los códigos reales en `.env.example`, Git, Vercel ni variables `VITE_*`.
 
 ### Vercel
 
-Importa el repositorio de GitHub en Vercel y añade `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` a las variables de entorno. La configuración de compilación y las rutas SPA están en `vercel.json`.
+Importa el repositorio de GitHub en Vercel y configura `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` y `VITE_API_URL`. `VITE_API_URL` debe ser la URL pública del backend Node en Render, sin una barra final. En el backend de Render, configura `APP_ORIGINS` con el dominio de Vercel permitido (orígenes separados por coma si hay más de uno). No pongas secretos del servidor en Vercel.
 
 ### Render
 
-Crea un Static Site desde el repositorio; Render puede detectar `render.yaml`. Añade los valores de `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` cuando los solicite. El manifiesto define la compilación, `dist` y el rewrite de la SPA.
+Despliega un servicio web Node desde el repositorio; Render puede detectar `render.yaml`. Configura las variables públicas `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`, y los secretos `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VIEWER_ACCESS_CODE`, `ADMIN_ACCESS_CODE` y `SESSION_SECRET`. Si vas a usar Vercel como frontend, agrega también el dominio de Vercel en `APP_ORIGINS`. Si ya existe un servicio Render de tipo Static Site, crea un servicio Web Node nuevo porque Render no permite cambiar el tipo del servicio existente.
 
 ### GitHub
 
