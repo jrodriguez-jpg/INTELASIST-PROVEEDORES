@@ -3,6 +3,7 @@ import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { constantTimeEqual, createSessionToken, verifySessionToken } from './auth.js';
+import { applyCors, readAllowedOrigins } from './cors.js';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const DIST = resolve(ROOT, 'dist');
@@ -42,10 +43,7 @@ const config = {
   sessionSecret: process.env.SESSION_SECRET,
   supabaseUrl: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-  allowedOrigins: (process.env.APP_ORIGINS || '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean),
+  allowedOrigins: readAllowedOrigins(process.env),
 };
 
 function validateConfig() {
@@ -56,6 +54,7 @@ function validateConfig() {
     SUPABASE_URL: config.supabaseUrl,
     SUPABASE_SERVICE_ROLE_KEY: config.supabaseServiceKey,
   }).filter(([, value]) => !value).map(([name]) => name);
+  if (config.allowedOrigins.size === 0) missing.push('ALLOWED_ORIGIN (or APP_ORIGINS)');
   if (missing.length) throw new Error(`Missing required server environment variables: ${missing.join(', ')}`);
   if (constantTimeEqual(config.accessCodeViewer, config.accessCodeAdmin)) {
     throw new Error('VIEWER_ACCESS_CODE and ADMIN_ACCESS_CODE must be different.');
@@ -129,22 +128,6 @@ async function readJson(request) {
   } catch {
     throw new HttpError(400, 'El contenido de la solicitud no es válido.');
   }
-}
-
-function setCors(request, response) {
-  const origin = request.headers.origin;
-  if (!origin) return;
-  const requestHost = request.headers.host;
-  const protocol = request.headers['x-forwarded-proto']?.split(',')[0].trim()
-    || (request.socket.encrypted ? 'https' : 'http');
-  const sameOrigin = requestHost && origin === `${protocol}://${requestHost}`;
-  const allowed = sameOrigin || config.allowedOrigins.includes(origin);
-  if (!allowed) throw new HttpError(403, 'Origen no permitido.');
-  response.setHeader('Access-Control-Allow-Origin', origin);
-  response.setHeader('Vary', 'Origin');
-  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-  response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-  response.setHeader('Access-Control-Max-Age', '600');
 }
 
 function getSession(request) {
@@ -316,11 +299,25 @@ const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url || '/', 'http://localhost');
     if (url.pathname.startsWith('/api/')) {
-      setCors(request, response);
+      if (!applyCors(request, response, config.allowedOrigins)) {
+        throw new HttpError(403, 'Origen no permitido.');
+      }
+      if (request.method === 'OPTIONS') {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
       return await handleApi(request, response, url);
     }
     if (url.pathname === '/api') {
-      setCors(request, response);
+      if (!applyCors(request, response, config.allowedOrigins)) {
+        throw new HttpError(403, 'Origen no permitido.');
+      }
+      if (request.method === 'OPTIONS') {
+        response.writeHead(204);
+        response.end();
+        return;
+      }
       throw new HttpError(404, 'Ruta no encontrada.');
     }
     return serveStatic(request, response, url.pathname);

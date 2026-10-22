@@ -36,11 +36,13 @@ Las sesiones tienen una vigencia de 12 horas. El backend valida cada operación 
 
 ### Vercel
 
-Importa el repositorio de GitHub en Vercel y configura `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` y `VITE_API_URL`. `VITE_API_URL` debe ser la URL pública del backend Node en Render, sin una barra final. En el backend de Render, configura `APP_ORIGINS` con el dominio de Vercel permitido (orígenes separados por coma si hay más de uno). No pongas secretos del servidor en Vercel.
+Importa el repositorio de GitHub en Vercel y configura `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` y `VITE_API_URL`. `VITE_API_URL` debe ser la URL pública del backend Node en Render, sin una barra final. En el backend de Render, configura `ALLOWED_ORIGIN` con el origen exacto `https://intelasist-proveedores.vercel.app` (sin ruta ni barra final). Para varios dominios, `APP_ORIGINS` acepta una lista separada por comas; se conserva por compatibilidad con la configuración anterior. No pongas secretos del servidor en Vercel.
 
 ### Render
 
-Despliega un servicio web Node desde el repositorio; Render puede detectar `render.yaml`. Configura las variables públicas `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`, y los secretos `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VIEWER_ACCESS_CODE`, `ADMIN_ACCESS_CODE` y `SESSION_SECRET`. Si vas a usar Vercel como frontend, agrega también el dominio de Vercel en `APP_ORIGINS`. Si ya existe un servicio Render de tipo Static Site, crea un servicio Web Node nuevo porque Render no permite cambiar el tipo del servicio existente.
+Despliega un servicio web Node desde el repositorio; Render puede detectar `render.yaml`. Configura `VITE_API_URL` con la URL pública del propio servicio (para el frontend servido por Render), las variables públicas `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`, los secretos `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VIEWER_ACCESS_CODE`, `ADMIN_ACCESS_CODE` y `SESSION_SECRET`, y `ALLOWED_ORIGIN=https://intelasist-proveedores.vercel.app`. Si se permiten otros dominios, configura `APP_ORIGINS` como una lista exacta de orígenes separados por comas. Si ya existe un servicio Render de tipo Static Site, crea un servicio Web Node nuevo porque Render no permite cambiar el tipo del servicio existente.
+
+La autenticación usa un token Bearer firmado, no cookies; no se habilita `Access-Control-Allow-Credentials`. El backend atiende solicitudes `OPTIONS` antes de validar sesiones. Las respuestas de la API para un origen permitido mantienen las cabeceras CORS, incluso cuando la ruta devuelve un error.
 
 ### GitHub
 

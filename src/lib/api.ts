@@ -15,6 +15,10 @@ export async function apiRequest<T>(
     body?: unknown;
   } = {},
 ): Promise<T> {
+  if (import.meta.env.PROD && !apiOrigin) {
+    throw new Error('Falta configurar VITE_API_URL con la URL pública del backend.');
+  }
+
   const headers = new Headers();
   if (options.body !== undefined) headers.set('Content-Type', 'application/json');
   if (options.token) headers.set('Authorization', `Bearer ${options.token}`);

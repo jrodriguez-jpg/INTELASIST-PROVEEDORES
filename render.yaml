@@ -9,6 +9,8 @@ services:
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
+      - key: VITE_API_URL
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
@@ -18,6 +20,8 @@ services:
       - key: ADMIN_ACCESS_CODE
         sync: false
       - key: SESSION_SECRET
+        sync: false
+      - key: ALLOWED_ORIGIN
         sync: false
       - key: APP_ORIGINS
         sync: false
