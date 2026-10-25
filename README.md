@@ -23,7 +23,7 @@ Aplica las migraciones en orden en el SQL Editor de Supabase:
 
 Aplica la tercera migración después de desplegar el nuevo backend y actualizar los frontends públicos (Render y Vercel, si ambos se usan). Confirma que el inicio de sesión funciona en cada dominio antes de revocar las escrituras directas del navegador.
 
-El directorio agrupa los contactos por empresa y provincia. Cada ficha muestra la empresa, el teléfono base, la zona y el encargado en un encabezado visual, seguido de etiquetas de servicio y una lista de contactos con sus teléfonos directos. Una misma empresa puede conservar fichas en varias provincias. Las tarjetas usan animaciones sutiles y respetan la preferencia del sistema por movimiento reducido.
+El directorio agrupa los contactos por empresa y provincia. Cada ficha muestra la empresa, el teléfono base, la zona y el encargado en un encabezado visual, seguido de etiquetas de servicio y una lista de contactos con sus teléfonos directos. Una misma empresa puede conservar fichas en varias provincias. Las tarjetas usan animaciones sutiles y respetan la preferencia del sistema por movimiento reducido. Para acelerar la apertura, la consulta inicial a Supabase comienza en paralelo con la suscripción Realtime, el directorio se conserva en caché por pestaña y los eventos recibidos actualizan solo el contacto afectado.
 
 ### Acceso y permisos
 

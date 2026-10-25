@@ -35,6 +35,42 @@ function rowToProveedor(r: ProveedorRow): Proveedor {
   };
 }
 
+const SESSION_KEY = 'intelasist-session';
+const PROVIDERS_CACHE_KEY = 'intelasist-proveedores-cache-v1';
+
+function restoreCachedProviders(): Proveedor[] {
+  const stored = sessionStorage.getItem(PROVIDERS_CACHE_KEY);
+  if (!stored) return [];
+
+  try {
+    const cached = JSON.parse(stored) as Proveedor[];
+    if (
+      !Array.isArray(cached)
+      || cached.some((provider) => (
+        typeof provider.id !== 'string'
+        || typeof provider.nombre !== 'string'
+        || !Array.isArray(provider.rol)
+        || !Array.isArray(provider.provincias)
+      ))
+    ) {
+      throw new Error('El caché local del directorio no tiene un formato válido.');
+    }
+    return cached;
+  } catch (error) {
+    console.warn('Se descartó el caché local del directorio:', error);
+    sessionStorage.removeItem(PROVIDERS_CACHE_KEY);
+    return [];
+  }
+}
+
+function cacheProviders(providers: Proveedor[]) {
+  try {
+    sessionStorage.setItem(PROVIDERS_CACHE_KEY, JSON.stringify(providers));
+  } catch (error) {
+    console.warn('No se pudo guardar el caché local del directorio:', error);
+  }
+}
+
 interface GrupoEmpresa {
   id: string;
   empresa: string;
@@ -392,8 +428,8 @@ function EmptyState({
 }
 
 export default function App() {
-  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [proveedores, setProveedores] = useState<Proveedor[]>(restoreCachedProviders);
+  const [loading, setLoading] = useState(() => restoreCachedProviders().length === 0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [session, setSession] = useState<AccessSession | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
@@ -405,86 +441,123 @@ export default function App() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem('intelasist-session');
+    const stored = sessionStorage.getItem(SESSION_KEY);
     if (!stored) {
       setCheckingSession(false);
       return;
     }
 
-    let storedSession: AccessSession;
+    let token: string;
     try {
-      storedSession = JSON.parse(stored) as AccessSession;
-      if (
-        typeof storedSession.token !== 'string'
-        || (storedSession.role !== 'viewer' && storedSession.role !== 'admin')
-      ) {
-        throw new Error('Invalid stored session.');
+      const value = JSON.parse(stored) as Partial<AccessSession>;
+      if (typeof value.token !== 'string') throw new Error('La sesión guardada no contiene un token.');
+      token = value.token;
+      const encodedPayload = token.split('.')[1];
+      if (!encodedPayload) throw new Error('El token guardado no tiene un payload válido.');
+      const payload = JSON.parse(atob(encodedPayload.replace(/-/g, '+').replace(/_/g, '/'))) as {
+        exp?: number;
+      };
+      if (typeof payload.exp !== 'number' || payload.exp <= Math.floor(Date.now() / 1000)) {
+        throw new Error('La sesión guardada ha expirado.');
       }
     } catch (error) {
-      console.error('La sesión local no es válida:', error);
-      sessionStorage.removeItem('intelasist-session');
+      console.warn('Se descartó la sesión local y se solicitará un nuevo acceso:', error);
+      sessionStorage.removeItem(SESSION_KEY);
       setCheckingSession(false);
       return;
     }
 
-    void apiRequest<{ role: AccessRole }>('/session', { token: storedSession.token })
-      .then(({ role }) => setSession({ ...storedSession, role }))
+    void apiRequest<{ role: AccessRole }>('/session', { token })
+      .then(({ role }) => {
+        const restoredSession = { token, role };
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(restoredSession));
+        setSession(restoredSession);
+      })
       .catch((error: unknown) => {
         console.error('No se pudo validar la sesión guardada:', error);
-        sessionStorage.removeItem('intelasist-session');
+        sessionStorage.removeItem(SESSION_KEY);
       })
       .finally(() => setCheckingSession(false));
   }, []);
 
   const handleAuthenticated = (newSession: AccessSession) => {
-    sessionStorage.setItem('intelasist-session', JSON.stringify(newSession));
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(newSession));
     setSession(newSession);
     setLoadError(null);
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem('intelasist-session');
+    sessionStorage.removeItem(SESSION_KEY);
     setSession(null);
-    setProveedores([]);
-    setLoading(true);
   };
 
   // Cargar proveedores desde Supabase
   const cargar = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('proveedores')
-      .select('*')
-      .order('created_at', { ascending: true });
-    if (error) {
-      console.error('No se pudieron cargar los contactos de Supabase:', error);
-      setLoadError('No se pudieron cargar los contactos. Se conservaron los datos visibles; vuelve a intentar.');
-      setLoading(false);
-      return;
-    }
+    try {
+      const { data, error } = await supabase
+        .from('proveedores')
+        .select('id,nombre,empresa,rol,provincias,telefono,correo,zona,notas');
+      if (error) throw error;
 
-    setLoadError(null);
-    setProveedores((data as ProveedorRow[]).map(rowToProveedor));
-    setLoading(false);
+      setLoadError(null);
+      setProveedores((data as ProveedorRow[]).map(rowToProveedor));
+      setLoading(false);
+    } catch (error) {
+      console.error('No se pudieron cargar los contactos de Supabase:', error);
+      setLoadError('No se pudieron actualizar los contactos. Se conservan los datos disponibles; vuelve a intentar.');
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     if (!session) return undefined;
+    let hasSubscribed = false;
+    let refreshAfterInitialLoad = false;
+    let initialLoadComplete = false;
+    void cargar().finally(() => {
+      initialLoadComplete = true;
+      if (refreshAfterInitialLoad) void cargar();
+    });
+
     const channel = supabase
       .channel('proveedores-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'proveedores' },
-        () => {
-          void cargar();
+        (payload) => {
+          if (payload.eventType === 'DELETE') {
+            const deletedId = (payload.old as { id?: unknown }).id;
+            if (typeof deletedId === 'string') {
+              setProveedores((current) => current.filter((provider) => provider.id !== deletedId));
+            }
+            return;
+          }
+
+          const changedRow = payload.new as ProveedorRow;
+          if (typeof changedRow?.id !== 'string') return;
+          const changedProvider = rowToProveedor(changedRow);
+          setProveedores((current) => {
+            const existingIndex = current.findIndex((provider) => provider.id === changedProvider.id);
+            if (existingIndex === -1) return [...current, changedProvider];
+            return current.map((provider) => (
+              provider.id === changedProvider.id ? changedProvider : provider
+            ));
+          });
         },
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          void cargar();
+          if (hasSubscribed) {
+            void cargar();
+          } else if (initialLoadComplete) {
+            void cargar();
+          } else {
+            refreshAfterInitialLoad = true;
+          }
+          hasSubscribed = true;
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.error(`Supabase Realtime no pudo conectarse: ${status}`);
-          setLoadError('No se pudo conectar a las actualizaciones en tiempo real.');
-          setLoading(false);
+          setLoadError('No se pudo conectar a las actualizaciones en tiempo real; se intentará reconectar.');
         }
       });
 
@@ -492,6 +565,39 @@ export default function App() {
       void supabase.removeChannel(channel);
     };
   }, [cargar, session]);
+
+  useEffect(() => {
+    if (session && proveedores.length > 0) cacheProviders(proveedores);
+  }, [proveedores, session]);
+
+  useEffect(() => {
+    if (!session) return undefined;
+    const tokenPayload = session.token.split('.')[1];
+    if (!tokenPayload) return undefined;
+
+    try {
+      const payload = JSON.parse(atob(tokenPayload.replace(/-/g, '+').replace(/_/g, '/'))) as {
+        exp?: number;
+      };
+      if (typeof payload.exp !== 'number') return undefined;
+      const remainingMs = payload.exp * 1000 - Date.now();
+      if (remainingMs <= 0) {
+        sessionStorage.removeItem(SESSION_KEY);
+        setSession(null);
+        return undefined;
+      }
+      const timeout = window.setTimeout(() => {
+        sessionStorage.removeItem(SESSION_KEY);
+        setSession(null);
+      }, remainingMs);
+      return () => window.clearTimeout(timeout);
+    } catch (error) {
+      console.error('No se pudo determinar la expiración de la sesión:', error);
+      sessionStorage.removeItem(SESSION_KEY);
+      setSession(null);
+      return undefined;
+    }
+  }, [session]);
 
   const provincias = useMemo(() => provinciasConProveedores(proveedores), [proveedores]);
   const todasConConteo = useMemo(() => {
@@ -760,9 +866,16 @@ export default function App() {
           </div>
 
           {loadError && (
-            <div className="mt-4 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-200">
+            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-200">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              {loadError}
+              <span className="flex-1">{loadError}</span>
+              <button
+                type="button"
+                onClick={() => void cargar()}
+                className="rounded-md px-2 py-1 font-semibold text-red-800 hover:bg-red-100"
+              >
+                Reintentar
+              </button>
             </div>
           )}
         </header>
