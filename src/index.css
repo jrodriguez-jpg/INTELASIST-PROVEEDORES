@@ -32,6 +32,58 @@
   }
 }
 
+.halloween-banner {
+  animation: halloween-glow 3.2s ease-in-out infinite;
+}
+
+.halloween-ghost {
+  animation: halloween-float 2.4s ease-in-out infinite;
+}
+
+.halloween-pumpkin {
+  display: inline-block;
+  transform-origin: center bottom;
+  animation: halloween-wiggle 3s ease-in-out infinite;
+}
+
+@keyframes halloween-glow {
+  0%,
+  100% {
+    box-shadow: 0 1px 3px rgb(124 45 18 / 8%);
+  }
+
+  50% {
+    box-shadow: 0 3px 14px rgb(249 115 22 / 20%);
+  }
+}
+
+@keyframes halloween-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes halloween-wiggle {
+  0%,
+  88%,
+  100% {
+    transform: rotate(0);
+  }
+
+  92% {
+    transform: rotate(-9deg);
+  }
+
+  96% {
+    transform: rotate(8deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

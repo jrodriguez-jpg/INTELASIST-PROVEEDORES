@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Cpu, MapPin, Wrench, SearchCheck, Home, Building2, Phone, UserRound,
-  ChevronRight, X, Plus, Loader2, Trash2, AlertCircle, Check, Pencil, LogOut,
+  ChevronRight, X, Plus, Loader2, Trash2, AlertCircle, Check, Pencil, LogOut, Ghost,
 } from 'lucide-react';
 import {
   NOMBRES_PROVINCIAS, CAPITAL_PROVINCIA, provinciasConProveedores,
@@ -692,6 +692,7 @@ export default function App() {
   if (!session) return <AccessGate onAuthenticated={handleAuthenticated} />;
 
   const canManage = session.role === 'admin';
+  const isHalloweenSeason = new Date().getMonth() === 9;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -772,6 +773,15 @@ export default function App() {
                 </>
               )}
             </div>
+            {isHalloweenSeason && (
+              <div className="halloween-banner mt-3 inline-flex w-fit items-center gap-2 rounded-full border border-orange-200/80 bg-gradient-to-r from-orange-50 via-amber-50 to-violet-50 px-3 py-1.5 text-[11px] font-semibold text-orange-900 shadow-sm">
+                <span className="halloween-ghost text-violet-700" aria-hidden="true">
+                  <Ghost className="h-4 w-4" />
+                </span>
+                <span>¡Especial de Halloween!</span>
+                <span className="halloween-pumpkin" aria-hidden="true">🎃</span>
+              </div>
+            )}
             <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
               {provinciaActiva ?? 'Selecciona una provincia'}
             </h1>
