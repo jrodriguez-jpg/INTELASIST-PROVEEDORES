@@ -555,9 +555,6 @@ export default function App() {
             refreshAfterInitialLoad = true;
           }
           hasSubscribed = true;
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.error(`Supabase Realtime no pudo conectarse: ${status}`);
-          setLoadError('No se pudo conectar a las actualizaciones en tiempo real; se intentará reconectar.');
         }
       });
 
