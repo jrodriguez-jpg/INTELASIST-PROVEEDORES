@@ -512,10 +512,42 @@ export default function App() {
   useEffect(() => {
     if (!session) return undefined;
     let hasSubscribed = false;
-    let refreshAfterInitialLoad = false;
     let initialLoadComplete = false;
+    let refreshAfterInitialLoad = false;
+    const pendingEvents: Array<{
+      eventType: string;
+      new: Record<string, unknown>;
+      old: Record<string, unknown>;
+    }> = [];
+    const applyRealtimeEvent = (payload: {
+      eventType: string;
+      new: Record<string, unknown>;
+      old: Record<string, unknown>;
+    }) => {
+      if (payload.eventType === 'DELETE') {
+        const deletedId = payload.old.id;
+        if (typeof deletedId === 'string') {
+          setProveedores((current) => current.filter((provider) => provider.id !== deletedId));
+        }
+        return;
+      }
+
+      const changedRow = payload.new as unknown as ProveedorRow;
+      if (typeof changedRow.id !== 'string') return;
+      const changedProvider = rowToProveedor(changedRow);
+      setProveedores((current) => {
+        const existingIndex = current.findIndex((provider) => provider.id === changedProvider.id);
+        if (existingIndex === -1) return [...current, changedProvider];
+        return current.map((provider) => (
+          provider.id === changedProvider.id ? changedProvider : provider
+        ));
+      });
+    };
+
     void cargar().finally(() => {
       initialLoadComplete = true;
+      pendingEvents.forEach(applyRealtimeEvent);
+      pendingEvents.length = 0;
       if (refreshAfterInitialLoad) void cargar();
     });
 
@@ -525,34 +557,23 @@ export default function App() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'proveedores' },
         (payload) => {
-          if (payload.eventType === 'DELETE') {
-            const deletedId = (payload.old as { id?: unknown }).id;
-            if (typeof deletedId === 'string') {
-              setProveedores((current) => current.filter((provider) => provider.id !== deletedId));
-            }
+          if (!initialLoadComplete) {
+            pendingEvents.push(payload);
             return;
           }
-
-          const changedRow = payload.new as ProveedorRow;
-          if (typeof changedRow?.id !== 'string') return;
-          const changedProvider = rowToProveedor(changedRow);
-          setProveedores((current) => {
-            const existingIndex = current.findIndex((provider) => provider.id === changedProvider.id);
-            if (existingIndex === -1) return [...current, changedProvider];
-            return current.map((provider) => (
-              provider.id === changedProvider.id ? changedProvider : provider
-            ));
-          });
+          applyRealtimeEvent(payload);
         },
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           if (hasSubscribed) {
-            void cargar();
+            if (initialLoadComplete) {
+              void cargar();
+            } else {
+              refreshAfterInitialLoad = true;
+            }
           } else if (initialLoadComplete) {
             void cargar();
-          } else {
-            refreshAfterInitialLoad = true;
           }
           hasSubscribed = true;
         }
