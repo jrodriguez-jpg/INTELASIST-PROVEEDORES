@@ -1,9 +1,17 @@
 import { useMemo, useState } from 'react';
-import { X, User, Building2, Phone, Mail, MapPin, FileText, Plus, Loader2 } from 'lucide-react';
-import { NOMBRES_PROVINCIAS, type Proveedor } from '@/data/providers';
+import { Building2, Loader2, Phone, Plus, User, X } from 'lucide-react';
+import type { Proveedor } from '@/data/providers';
 import { apiRequest } from '@/lib/api';
 
-export type Rol = 'operador' | 'inspector' | 'hogar';
+interface BaseOption {
+  key: string;
+  empresa: string;
+  provincia: string;
+  telefono: string;
+  zona: string;
+  rol: Proveedor['rol'];
+  notas: string;
+}
 
 interface Props {
   open: boolean;
@@ -13,319 +21,170 @@ interface Props {
   token: string;
 }
 
-const ROLES: { id: Rol; label: string }[] = [
-  { id: 'operador', label: 'Operador' },
-  { id: 'inspector', label: 'Inspector' },
-  { id: 'hogar', label: 'Hogar' },
-];
+function getBaseOptions(proveedores: Proveedor[]): BaseOption[] {
+  const bases = new Map<string, BaseOption>();
+
+  proveedores.forEach((proveedor) => {
+    const empresaCompleta = proveedor.empresa?.trim().replace(/\s+/g, ' ');
+    if (!empresaCompleta) return;
+
+    const basePhone = empresaCompleta.match(/(\d{3,4}-\d{4})\s*$/)?.[1];
+    const empresa = empresaCompleta.replace(/\s*\d{3,4}-\d{4}\s*$/, '').trim() || empresaCompleta;
+    const contactoBase = proveedor.notas?.match(/Contacto de empresa:\s*([^|]+)/i)?.[1]?.trim();
+
+    proveedor.provincias.forEach((provincia) => {
+      const key = `${empresaCompleta.toLocaleLowerCase('es')}|${provincia}`;
+      const existing = bases.get(key);
+      if (existing) {
+        proveedor.rol.forEach((rol) => {
+          if (!existing.rol.includes(rol)) existing.rol.push(rol);
+        });
+        if (!existing.zona && proveedor.zona) existing.zona = proveedor.zona;
+        if (!existing.notas && proveedor.notas) existing.notas = proveedor.notas;
+        if (!existing.telefono && (basePhone || contactoBase)) {
+          existing.telefono = basePhone ?? proveedor.telefono ?? '';
+        }
+        return;
+      }
+
+      bases.set(key, {
+        key,
+        empresa,
+        provincia,
+        telefono: basePhone ?? (contactoBase ? proveedor.telefono ?? '' : ''),
+        zona: proveedor.zona ?? '',
+        rol: [...proveedor.rol],
+        notas: proveedor.notas ?? '',
+      });
+    });
+  });
+
+  return [...bases.values()].sort((a, b) => (
+    a.provincia.localeCompare(b.provincia, 'es') || a.empresa.localeCompare(b.empresa, 'es')
+  ));
+}
 
 export function AddProveedorModal({ open, onClose, onSaved, proveedores, token }: Props) {
+  const bases = useMemo(() => getBaseOptions(proveedores), [proveedores]);
   const [nombre, setNombre] = useState('');
-  const [empresa, setEmpresa] = useState('');
-  const [provincia, setProvincia] = useState('');
   const [baseSeleccionada, setBaseSeleccionada] = useState('');
-  const [roles, setRoles] = useState<Rol[]>([]);
   const [telefono, setTelefono] = useState('');
-  const [correo, setCorreo] = useState('');
-  const [zona, setZona] = useState('');
-  const [notas, setNotas] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const bases = useMemo(() => {
-    const porEmpresa = new Map<string, { key: string; empresa: string; zona: string }>();
-    proveedores.forEach((proveedor) => {
-      const nombreEmpresa = proveedor.empresa?.trim().replace(/\s+/g, ' ');
-      if (!nombreEmpresa || !proveedor.provincias.includes(provincia)) return;
-
-      const key = nombreEmpresa.toLocaleLowerCase('es');
-      const existente = porEmpresa.get(key);
-      if (!existente) {
-        porEmpresa.set(key, { key, empresa: nombreEmpresa, zona: proveedor.zona ?? '' });
-      } else if (!existente.zona && proveedor.zona) {
-        existente.zona = proveedor.zona;
-      }
-    });
-    return [...porEmpresa.values()].sort((a, b) => a.empresa.localeCompare(b.empresa, 'es'));
-  }, [proveedores, provincia]);
 
   if (!open) return null;
 
   const reset = () => {
     setNombre('');
-    setEmpresa('');
-    setProvincia('');
     setBaseSeleccionada('');
-    setRoles([]);
     setTelefono('');
-    setCorreo('');
-    setZona('');
-    setNotas('');
     setError(null);
   };
 
-  const toggleRol = (r: Rol) => {
-    setRoles((prev) => (prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]));
+  const handleClose = () => {
+    if (saving) return;
+    reset();
+    onClose();
   };
 
-  const seleccionarBase = (value: string) => {
-    setBaseSeleccionada(value);
-    const base = bases.find((opcion) => opcion.key === value);
-    setEmpresa(base?.empresa ?? '');
-    setZona(base?.zona ?? '');
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setError(null);
-
-    if (!nombre.trim()) {
-      setError('El nombre es obligatorio.');
+    const base = bases.find((option) => option.key === baseSeleccionada);
+    if (!nombre.trim() || !baseSeleccionada || !telefono.trim()) {
+      setError('Completa el nombre, la base y el teléfono del contacto.');
       return;
     }
-    if (roles.length === 0) {
-      setError('Selecciona al menos un rol (Operador, Inspector u Hogar).');
-      return;
-    }
-    if (!provincia) {
-      setError('Selecciona una provincia.');
-      return;
-    }
-    if (!baseSeleccionada) {
-      setError('Selecciona una base existente o indica que deseas registrar una nueva.');
-      return;
-    }
-    if (baseSeleccionada === '__nueva_base__' && !empresa.trim()) {
-      setError('Escribe el nombre de la nueva base.');
+    if (!base) {
+      setError('La base seleccionada ya no está disponible. Actualiza el directorio e inténtalo de nuevo.');
       return;
     }
 
+    const empresaCompleta = base.telefono
+      ? `${base.empresa} ${base.telefono}`
+      : base.empresa;
     setSaving(true);
-
     try {
       await apiRequest('/proveedores', {
         method: 'POST',
         token,
         body: {
           nombre: nombre.trim(),
-          empresa: empresa.trim(),
-          rol: roles,
-          provincias: [provincia],
+          empresa: empresaCompleta,
+          rol: base.rol,
+          provincias: [base.provincia],
           telefono: telefono.trim(),
-          correo: correo.trim(),
-          zona: zona.trim(),
-          notas: notas.trim(),
+          zona: base.zona,
+          notas: base.notas,
         },
       });
+      reset();
+      onSaved();
+      onClose();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'No se pudo guardar el contacto.');
+    } finally {
       setSaving(false);
-      return;
     }
-
-    setSaving(false);
-    reset();
-    onSaved();
-    onClose();
   };
 
-  const fieldCls =
-    'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100';
+  const fieldCls = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100';
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
-      <div className="my-8 w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-        {/* Header */}
+      <div className="my-8 w-full max-w-xl rounded-2xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div className="flex items-center gap-2">
             <div className="grid h-9 w-9 place-items-center rounded-lg bg-sky-50 text-sky-600">
-              <Plus className="h-5 w-5" />
+              <User className="h-5 w-5" />
             </div>
             <div>
               <h2 className="text-base font-semibold text-slate-900">Agregar contacto</h2>
-              <p className="text-xs text-slate-500">Completa los datos del nuevo proveedor.</p>
+              <p className="text-xs text-slate-500">Asocia una persona a una base existente.</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-          >
+          <button type="button" onClick={handleClose} className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600" aria-label="Cerrar">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Body */}
         <form onSubmit={handleSubmit} className="space-y-5 px-6 py-5">
-          {/* Nombre */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                <User className="h-3.5 w-3.5" /> Nombre *
-              </span>
-              <input
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                placeholder="Nombre completo"
-                className={fieldCls}
-              />
-            </label>
-            <div className="rounded-lg border border-sky-100 bg-sky-50/70 px-3 py-2.5 text-xs leading-relaxed text-sky-900">
-              Elige la provincia y la base para que el contacto quede asociado al grupo correcto.
-            </div>
-          </div>
-
-          {/* Roles */}
-          <div>
-            <span className="mb-1.5 block text-xs font-semibold text-slate-600">Rol *</span>
-            <div className="flex flex-wrap gap-2">
-              {ROLES.map((r) => {
-                const active = roles.includes(r.id);
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => toggleRol(r.id)}
-                    className={`rounded-lg px-3.5 py-2 text-sm font-medium transition-all ${
-                      active
-                        ? 'bg-slate-900 text-white shadow-sm'
-                        : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    {r.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Provincia y base */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                <MapPin className="h-3.5 w-3.5" /> Provincia *
-              </span>
-              <select
-                value={provincia}
-                onChange={(e) => {
-                  setProvincia(e.target.value);
-                  setBaseSeleccionada('');
-                  setEmpresa('');
-                  setZona('');
-                }}
-                className={fieldCls}
-              >
-                <option value="">Selecciona una provincia</option>
-                {NOMBRES_PROVINCIAS.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                <Building2 className="h-3.5 w-3.5" /> Base *
-              </span>
-              <select
-                value={baseSeleccionada}
-                onChange={(e) => seleccionarBase(e.target.value)}
-                disabled={!provincia}
-                className={`${fieldCls} disabled:cursor-not-allowed disabled:bg-slate-100`}
-              >
-                <option value="">{provincia ? 'Selecciona una base' : 'Primero selecciona una provincia'}</option>
-                {bases.map((base) => (
-                  <option key={base.key} value={base.key}>
-                    {base.empresa}{base.zona ? ` · ${base.zona}` : ''}
-                  </option>
-                ))}
-                {provincia && <option value="__nueva_base__">+ Registrar una nueva base</option>}
-              </select>
-            </label>
-          </div>
-
-          {baseSeleccionada === '__nueva_base__' && (
-            <label className="block">
-              <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                <Building2 className="h-3.5 w-3.5" /> Nombre de la nueva base *
-              </span>
-              <input
-                value={empresa}
-                onChange={(e) => setEmpresa(e.target.value)}
-                placeholder="Empresa o razón social"
-                className={fieldCls}
-              />
-            </label>
-          )}
-
-          {/* Teléfono + Correo */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                <Phone className="h-3.5 w-3.5" /> Teléfono
-              </span>
-              <input
-                value={telefono}
-                onChange={(e) => setTelefono(e.target.value)}
-                placeholder="507-600-0000"
-                className={fieldCls}
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                <Mail className="h-3.5 w-3.5" /> Correo
-              </span>
-              <input
-                value={correo}
-                onChange={(e) => setCorreo(e.target.value)}
-                placeholder="correo@empresa.com"
-                className={fieldCls}
-              />
-            </label>
-          </div>
-
-          {/* Zona */}
           <label className="block">
             <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-              <MapPin className="h-3.5 w-3.5" /> Zona de cobertura
+              <User className="h-3.5 w-3.5" /> Nombre del contacto *
             </span>
-            <input
-              value={zona}
-              onChange={(e) => setZona(e.target.value)}
-              placeholder="Ej. Área Metropolitana"
-              className={fieldCls}
-            />
+            <input value={nombre} onChange={(event) => setNombre(event.target.value)} placeholder="Nombre completo" className={fieldCls} maxLength={200} required />
           </label>
 
-          {/* Notas */}
           <label className="block">
             <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-              <FileText className="h-3.5 w-3.5" /> Notas
+              <Building2 className="h-3.5 w-3.5" /> Base *
             </span>
-            <textarea
-              value={notas}
-              onChange={(e) => setNotas(e.target.value)}
-              rows={2}
-              placeholder="Información adicional..."
-              className={`${fieldCls} resize-none`}
-            />
+            <select value={baseSeleccionada} onChange={(event) => setBaseSeleccionada(event.target.value)} className={fieldCls} required>
+              <option value="">Selecciona la base</option>
+              {bases.map((base) => (
+                <option key={base.key} value={base.key}>
+                  {base.provincia} · {base.empresa}{base.telefono ? ` · ${base.telefono}` : ''}
+                </option>
+              ))}
+            </select>
+            {bases.length === 0 && (
+              <span className="mt-1 block text-xs text-amber-700">Primero registra una base para poder agregar contactos.</span>
+            )}
           </label>
 
-          {error && (
-            <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-red-200">
-              {error}
-            </div>
-          )}
+          <label className="block">
+            <span className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+              <Phone className="h-3.5 w-3.5" /> Teléfono del contacto *
+            </span>
+            <input type="tel" value={telefono} onChange={(event) => setTelefono(event.target.value)} placeholder="Ej. 6000-0000" className={fieldCls} maxLength={30} required />
+          </label>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
+          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{error}</p>}
+
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <button type="button" onClick={handleClose} disabled={saving} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-60">Cancelar</button>
+            <button type="submit" disabled={saving || bases.length === 0} className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               {saving ? 'Guardando...' : 'Guardar contacto'}
             </button>

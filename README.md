@@ -20,8 +20,11 @@ Aplica las migraciones en orden en el SQL Editor de Supabase:
 1. `supabase/migrations/20261018043416_create_proveedores_table.sql` crea la tabla persistente `public.proveedores` con nombre, empresa, teléfono y los demás campos del directorio.
 2. `supabase/migrations/20261020000000_enable_proveedores_realtime.sql` habilita los permisos de la aplicación y agrega la tabla a Supabase Realtime.
 3. `supabase/migrations/20261021010000_restrict_provider_writes.sql` revoca INSERT, UPDATE y DELETE a `anon` y `authenticated`; las escrituras autorizadas pasan por el backend.
+4. `supabase/migrations/20261106190000_add_missing_panama_oeste_providers.sql` agrega, sin duplicar registros existentes, los siete contactos faltantes de tres bases de Panamá Oeste detectados en el directorio.
 
 Aplica la tercera migración después de desplegar el nuevo backend y actualizar los frontends públicos (Render y Vercel, si ambos se usan). Confirma que el inicio de sesión funciona en cada dominio antes de revocar las escrituras directas del navegador.
+
+Aplica la cuarta migración desde el SQL Editor de Supabase para incorporar los contactos faltantes.
 
 El directorio agrupa los contactos por empresa y provincia. Cada ficha muestra la empresa, el teléfono base, la zona y el encargado en un encabezado visual, seguido de etiquetas de servicio y una lista de contactos con sus teléfonos directos. Una misma empresa puede conservar fichas en varias provincias. Las tarjetas usan animaciones sutiles y respetan la preferencia del sistema por movimiento reducido. Para acelerar la apertura, la consulta inicial a Supabase comienza en paralelo con la suscripción Realtime, el directorio se conserva en caché por pestaña y los eventos recibidos actualizan solo el contacto afectado.
 
@@ -30,7 +33,8 @@ El directorio agrupa los contactos por empresa y provincia. Cada ficha muestra l
 La pantalla de inicio solicita un código general:
 
 - El código de solo lectura permite ver el directorio sin controles de creación, edición o eliminación.
-- El código de administración habilita agregar contactos y bases, editar contactos y borrar registros.
+- El código de administración habilita agregar contactos por separado de las bases, editar contactos y borrar registros.
+- Para registrar una empresa, usa **Nueva base** e ingresa el nombre, teléfono principal, encargado, provincia y categorías de servicio. Después, usa **Agregar contacto** para guardar cada persona seleccionando una base existente e ingresando su nombre y teléfono directo.
 
 Las sesiones tienen una vigencia de 12 horas. El backend valida cada operación de escritura, por lo que ocultar controles en el navegador no es la única barrera. Configura `VIEWER_ACCESS_CODE`, `ADMIN_ACCESS_CODE` y un `SESSION_SECRET` aleatorio de al menos 32 caracteres como secretos del servidor. Los dos códigos deben ser distintos. No guardes los códigos reales en `.env.example`, Git, Vercel ni variables `VITE_*`.
 

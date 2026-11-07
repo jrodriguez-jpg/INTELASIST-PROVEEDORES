@@ -9,6 +9,7 @@ import {
 } from '@/data/providers';
 import { supabase, type ProveedorRow } from '@/lib/supabase';
 import { AddProveedorModal } from '@/components/AddProveedorModal';
+import { AddBaseModal } from '@/components/AddBaseModal';
 import { AccessGate } from '@/components/AccessGate';
 import { EditProveedorModal } from '@/components/EditProveedorModal';
 import { apiRequest, type AccessRole, type AccessSession } from '@/lib/api';
@@ -98,8 +99,8 @@ function crearGruposEmpresa(proveedores: Proveedor[]): GrupoEmpresa[] {
 
   return [...grupos.entries()].map(([id, contactos]) => {
     const empresaCompleta = contactos[0].empresa?.trim().replace(/\s+/g, ' ') ?? 'Contacto';
-    const telefonoBase = empresaCompleta.match(/(\d{4}-\d{4})\s*$/)?.[1] ?? null;
-    const empresa = empresaCompleta.replace(/\s*\d{4}-\d{4}\s*$/, '').trim() || empresaCompleta;
+    const telefonoBase = empresaCompleta.match(/(\d{3,4}-\d{4})\s*$/)?.[1] ?? null;
+    const empresa = empresaCompleta.replace(/\s*\d{3,4}-\d{4}\s*$/, '').trim() || empresaCompleta;
     const encargadoEnNotas = contactos
       .map((contacto) => contacto.notas?.match(/Contacto de empresa:\s*([^|]+)/i)?.[1]?.trim())
       .find((nombre): nombre is string => Boolean(nombre));
@@ -437,6 +438,7 @@ export default function App() {
   const [busqueda, setBusqueda] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [baseModalOpen, setBaseModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Proveedor | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -871,14 +873,22 @@ export default function App() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {canManage && (
-                  <button
-                    onClick={() => setModalOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700"
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span className="hidden sm:inline">Agregar contacto</span>
-                    <span className="sm:hidden">Agregar</span>
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setModalOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-sky-700"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Agregar contacto</span>
+                    </button>
+                    <button
+                      onClick={() => setBaseModalOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-lg border border-sky-200 bg-white px-3.5 py-2 text-sm font-semibold text-sky-700 transition-colors hover:bg-sky-50"
+                    >
+                      <Building2 className="h-4 w-4" />
+                      <span>Nueva base</span>
+                    </button>
+                  </>
                 )}
                 <button
                   type="button"
@@ -939,6 +949,12 @@ export default function App() {
         onClose={() => setModalOpen(false)}
         onSaved={cargar}
         proveedores={proveedores}
+        token={session.token}
+      />
+      <AddBaseModal
+        open={baseModalOpen}
+        onClose={() => setBaseModalOpen(false)}
+        onSaved={cargar}
         token={session.token}
       />
       <EditProveedorModal

@@ -54,12 +54,12 @@ export function EditProveedorModal({ proveedor, token, onClose, onSaved }: Props
       setError('El nombre, al menos un rol y una provincia son obligatorios.');
       return;
     }
-    const basePhone = proveedor.empresa?.match(/(\d{4}-\d{4})\s*$/)?.[1];
+    const basePhone = proveedor.empresa?.match(/(\d{3,4}-\d{4})\s*$/)?.[1];
     const contactIsBase = basePhone
       && proveedor.telefono?.replace(/\D/g, '') === basePhone.replace(/\D/g, '');
     const updatedCompany = contactIsBase
       ? [
-          empresa.trim().replace(/\s*\d{4}-\d{4}\s*$/, '').trim(),
+          empresa.trim().replace(/\s*\d{3,4}-\d{4}\s*$/, '').trim(),
           telefono.trim(),
         ].filter(Boolean).join(' ')
       : empresa.trim();
