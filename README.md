@@ -26,6 +26,8 @@ Aplica la tercera migración después de desplegar el nuevo backend y actualizar
 
 Aplica la cuarta migración desde el SQL Editor de Supabase para incorporar los contactos faltantes.
 
+La migración `supabase/migrations/20261107011308_reconcile_inspector_directory.sql` corrige el nombre de la base Servi Express Vial y agrega a Heinstein Javier Castillos como inspector en Panamá Centro.
+
 El directorio agrupa los contactos por empresa y provincia. Cada ficha muestra la empresa, el teléfono base, la zona y el encargado en un encabezado visual, seguido de etiquetas de servicio y una lista de contactos con sus teléfonos directos. Una misma empresa puede conservar fichas en varias provincias. Las tarjetas usan animaciones sutiles y respetan la preferencia del sistema por movimiento reducido. Para acelerar la apertura, la consulta inicial a Supabase comienza en paralelo con la suscripción Realtime, el directorio se conserva en caché por pestaña y los eventos recibidos actualizan solo el contacto afectado.
 
 ### Acceso y permisos
