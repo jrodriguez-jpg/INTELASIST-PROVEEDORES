@@ -143,8 +143,7 @@ function Logo() {
   return (
     <div className="flex items-center gap-3 px-5 py-6">
       <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 shadow-lg shadow-sky-500/30">
-        <Cpu className="h-6 w-6 text-white" strokeWidth={2.2} />
-        <span className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full bg-slate-900 text-[9px] font-bold text-sky-300 ring-2 ring-slate-900">
+        <span className="text-xl font-black tracking-tight text-white">
           IA
         </span>
       </div>
